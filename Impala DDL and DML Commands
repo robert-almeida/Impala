@@ -1,1 +1,101 @@
+#Abrir o terminal da VM e verificar se os serviços estão ativos executando os seguintes comandos:
+sudo service impala-server status
+sudo service impala-state-store status
+sudo service impala-catalog status
 
+#Verificar os parâmetros do impala-shell:
+impala-shell --help
+
+#Acessar o shell do Impala:
+impala-shell --quiet
+
+#Verificar a versão do Impala:
+select version();
+
+#Usar o operador SHELL para acessar comandos do SO:
+shell pwd;
+shell whoami;
+
+#Criar diretorio no HFDS e depois listar:
+shell hdfs dfs -mkdir meudir;
+shell hdfs dfs -ls;
+
+#Listar as bases de dados:
+show databases;
+
+#Comando para recarregar os metados para o Impala (para tabelas totalmente novas ou na exclusão de arquivos de dados):
+INVALIDATE METADATA;
+
+#Listar novamente as bases de dados, ativar o BD tw_db (criado no repositório "Hadoop-Hive--Exercices-Part-II") e mostrar as tabelas dentro do BD
+show databases;
+use tw_db;
+show tables;
+
+#Listar as colunas de uma tabela
+describe tweet_date;
+
+#Logs das queries do Impala podem ser acessados pela interface Web http://localhost:25000/queries
+
+#Criar uma tabela a partir do layout de outra:
+create table tweet_date_vazia like tweet_date;
+describe tweet_date_vazia;
+select count(*) from tweet_date_vazia;
+
+#Inserir dados na tabela a partir da cláusula INSERT INTO
+insert into table tweet_date_vazia select * from tweet_date;
+select count(*) from tweet_date_vazia;
+
+#Criar e popular a tabela utilizando a sintaxe “CREATE TABLE AS SELECT”
+create table clone_tweet_date as select * from tweet_date;
+describe clone_tweet_date;
+
+#Utilizar a sintaxe “CREATE TABLE AS SELECT” e alterando o formato do arquivo
+create table parquet_tweet_date stored as parquet as select * from tweet_date;
+
+#Listar as tabelas no HDFS e comparar o tamanho
+shell hdfs dfs -ls /user/hive/warehouse/tw_db.db/parquet_tweet_date;
+shell hdfs dfs -ls /user/hive/warehouse/tw_db.db/tweet_date;
+
+#Verificar informações das tabelas:
+show table stats parquet_tweet_date;
+show table stats tweet_date;
+
+#Verificar informações das colunas da tabela
+show column stats parquet_tweet_date;
+
+#Particionar a tabela. As colunas utilizadas para a partição devem ser as últimas da tabela utilizada para carregar os dados
+create table particao_tweet_date partitioned by (yyyy,mm) as select screen_name, id, created_at, text, tweet_score, sentiment, dd, yyyy, mm from tweet_date; 
+
+#Verificar as partições
+show partitions particao_tweet_date;
+
+#Avaliar a efetividade da query
+explain select text from tweet_date where yyyy = '2016' and mm = '01';
+explain select text from particao_tweet_date where yyyy = '2016' and mm = '01';
+#Na saída de ambas queries, repare a diferença em "size"
+
+#Alterar o tipo de dado de uma única partição
+alter table particao_tweet_date partition (yyyy='2016',mm='01') set fileformat parquet;
+show partitions particao_tweet_date;
+
+#Atualizar os dados de uma tabela quando esses forem inseridos fora do Impala (exemplo: HDFS, Hive) 
+#Duplicando os dados da tabela via HDFS
+shell hdfs dfs -cp /user/hive/warehouse/tw_db.db/tweet_date/000000_0 /user/hive/warehouse/tw_db.db/tweet_date/000000_1
+shell hdfs dfs -ls /user/hive/warehouse/tw_db.db/tweet_date;
+select count(*) from tweet_date;
+refresh tweet_date;
+select count(*) from tweet_date;
+
+#Verificar a instrução de criação da tabela
+show create table particao_tweet_date;
+show create table parquet_tweet_date;
+
+#Verificar os arquivos de uma tabela 
+show files in particao_tweet_date;
+
+#Verificar informações detalhadas de uma tabela e reparar em "Table Type"
+describe formatted parquet_tweet_date;
+
+#Alterar o tipo de tabela de interna para externa
+alter table parquet_tweet_date set tblproperties('external'='true');
+describe formatted parquet_tweet_date;
